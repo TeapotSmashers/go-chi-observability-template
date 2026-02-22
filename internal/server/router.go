@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"go-chi-observability/internal/calculator"
 	"go-chi-observability/internal/handlers"
 	"go-chi-observability/internal/observability"
 )
@@ -18,6 +19,9 @@ func NewRouter() http.Handler {
 	r.Use(observability.LoggingMiddleware)
 
 	r.Get("/health", handlers.Health)
+
+	// Domain route groups — add new RegisterRoutes calls here as the project grows
+	calculator.RegisterRoutes(r)
 
 	r.Handle("/metrics", observability.PrometheusHandler())
 

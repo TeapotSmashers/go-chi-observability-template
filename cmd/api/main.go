@@ -31,7 +31,7 @@ func main() {
 	defer traceShutdown(ctx)
 
 	// Metrics
-	metricShutdown, err := observability.InitMetrics(ctx)
+	metricShutdown, err := initMetrics(ctx)
 	if err != nil {
 		panic(err)
 	}
