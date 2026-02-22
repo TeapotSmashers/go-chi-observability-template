@@ -25,6 +25,23 @@ querier:
   search:
     query_timeout: 30s
 
+metrics_generator:
+  ring:
+    kvstore:
+      store: inmemory
+  storage:
+    path: /var/tempo/generator/wal
+  traces_storage:
+    path: /var/tempo/generator/traces
+  processor:
+    local_blocks:
+      filter_server_spans: false
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [local-blocks]
+
 storage:
   trace:
     backend: local
