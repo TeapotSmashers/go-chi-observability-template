@@ -4,7 +4,7 @@ This file provides context for AI coding agents working on this codebase.
 
 ## Project Overview
 
-This is a Go HTTP API boilerplate built on [go-chi/chi](https://github.com/go-chi/chi) with production-grade observability baked in: OpenTelemetry tracing, OpenTelemetry metrics (OTLP push), Prometheus metrics (pull), and Zap structured logging with automatic trace correlation.
+This is a Go HTTP API boilerplate built on [go-chi/chi](https://github.com/go-chi/chi) with production-grade observability baked in: OpenTelemetry tracing, OpenTelemetry metrics (OTLP push), Prometheus metrics (pull), and Zap structured logging exported through OTel to Loki with automatic trace correlation.
 
 The project serves as a template — the `calculator` domain is included as a reference implementation demonstrating all observability patterns.
 
@@ -12,9 +12,10 @@ The project serves as a template — the `calculator` domain is included as a re
 
 - **Language:** Go 1.25+
 - **Router:** go-chi/chi v5
-- **Logging:** go.uber.org/zap (production JSON)
+- **Logging:** go.uber.org/zap (production JSON) + OTel Zap bridge (OTLP/HTTP export to Loki)
 - **Tracing:** OpenTelemetry SDK with OTLP/HTTP exporter
 - **Metrics:** OpenTelemetry SDK (OTLP/HTTP push) + Prometheus (HTTP pull at `/metrics`)
+- **Log Export:** OTel LoggerProvider with otelzap bridge (logs → OTLP → Collector → Loki)
 - **Request IDs:** google/uuid v4
 
 ## Project Structure
@@ -28,6 +29,7 @@ internal/
   observability/     # Generic infra — NEVER import domain packages from here
     errors.go        # RecordError() — shared span+metric+log+response helper
     logger.go        # Zap logger + LoggerWithTrace(ctx) for trace correlation
+    logging.go       # OTel LoggerProvider + Zap bridge (logs → OTLP → Collector → Loki)
     metrics.go       # OTel MeterProvider + Prometheus handler
     middleware.go    # RequestID, Tracing, Logging middlewares (applied to all routes)
     request_id.go    # UUID request ID + context helpers
@@ -53,7 +55,7 @@ docs/
 
 otel-collect/          # Docker-based observability backend
   docker-compose.yml           # All services: OTel Collector, Tempo, Prometheus, Loki, Grafana
-  otel-collector-config.yaml   # Collector pipeline: OTLP → Tempo (traces) + Prometheus (metrics)
+  otel-collector-config.yaml   # Collector pipeline: OTLP → Tempo (traces) + Prometheus (metrics) + Loki (logs)
   tempo.yaml                   # Grafana Tempo trace storage config
   prometheus.yaml              # Prometheus scrape targets
   grafana-datasources.yaml     # Auto-provisioned Grafana datasources

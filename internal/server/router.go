@@ -14,16 +14,17 @@ func NewRouter() http.Handler {
 
 	r := chi.NewRouter()
 
-	r.Use(observability.RequestIDMiddleware)
-	r.Use(observability.TracingMiddleware)
-	r.Use(observability.LoggingMiddleware)
-
+	r.Handle("/metrics", observability.PrometheusHandler())
 	r.Get("/health", handlers.Health)
 
-	// Domain route groups — add new RegisterRoutes calls here as the project grows
-	calculator.RegisterRoutes(r)
+	r.Group(func(r chi.Router) {
+		r.Use(observability.RequestIDMiddleware)
+		r.Use(observability.TracingMiddleware)
+		r.Use(observability.LoggingMiddleware)
 
-	r.Handle("/metrics", observability.PrometheusHandler())
+		// Domain route groups — add new RegisterRoutes calls here as the project grows
+		calculator.RegisterRoutes(r)
+	})
 
 	return r
 }

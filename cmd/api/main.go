@@ -30,6 +30,13 @@ func main() {
 	}
 	defer traceShutdown(ctx)
 
+	// Logging (OTel bridge — must be after Logger and Tracing init)
+	logShutdown, err := observability.InitLogging(ctx)
+	if err != nil {
+		panic(err)
+	}
+	defer logShutdown(ctx)
+
 	// Metrics
 	metricShutdown, err := initMetrics(ctx)
 	if err != nil {

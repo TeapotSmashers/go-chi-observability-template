@@ -12,17 +12,19 @@ services:
     depends_on:
       - tempo
       - prometheus
+      - loki
 
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.7.2
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo.yaml:/etc/tempo.yaml:ro
       - tempo-data:/var/tempo
     ports:
       - "3200:3200"   # tempo HTTP
-      - "4316:4316"   # otlp grpc
-      - "4311:4311"   # otlp http
+      - "4316:4316"   # tempo internal gRPC
+      - "4319:4317"   # otlp gRPC (host 4319 to avoid clash with collector)
+      - "4320:4318"   # otlp HTTP (host 4320 to avoid clash with collector)
 
   prometheus:
     image: prom/prometheus:latest

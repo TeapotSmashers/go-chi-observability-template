@@ -28,11 +28,12 @@ This document covers the internal implementation of the observability stack and 
 The observability layer lives entirely in `internal/observability/`. It is a **generic infrastructure package** that has no knowledge of application domains. Domain packages (like `internal/calculator/`) import it — never the reverse.
 
 ```
-cmd/api/main.go            # Initialises logger -> tracing -> metrics (in order)
+cmd/api/main.go            # Initialises logger -> tracing -> logging -> metrics (in order)
 cmd/api/init.go            # Wires domain-specific metric instruments
 
 internal/observability/
   logger.go                # Zap structured logger + trace correlation
+  logging.go               # OTel LoggerProvider + Zap bridge (logs → OTLP)
   tracing.go               # OTel TracerProvider (OTLP/HTTP exporter)
   metrics.go               # OTel MeterProvider (OTLP/HTTP) + Prometheus /metrics
   middleware.go            # RequestID, Tracing, Logging middlewares
@@ -45,10 +46,11 @@ internal/observability/
 The order matters because later systems depend on earlier ones:
 
 ```
-1. InitLogger()      — Zap logger available globally
+1. InitLogger()      — Zap logger available globally (stdout JSON)
 2. InitTracing(ctx)  — OTel TracerProvider registered, spans can be created
-3. initMetrics(ctx)  — OTel MeterProvider registered, then domain metrics init
-4. NewRouter()       — Middleware stack wired, routes registered
+3. InitLogging(ctx)  — OTel LoggerProvider registered, Zap tee'd to OTLP export
+4. initMetrics(ctx)  — OTel MeterProvider registered, then domain metrics init
+5. NewRouter()       — Middleware stack wired, routes registered
 ```
 
 All init functions return shutdown closures that are deferred in `main()` for graceful drain on `SIGINT`/`SIGTERM`.
@@ -59,16 +61,30 @@ All init functions return shutdown closures that are deferred in `main()` for gr
 
 ### 1. Structured Logging
 
-**File:** `internal/observability/logger.go`
-**Library:** `go.uber.org/zap` (production JSON encoder)
+**Files:** `internal/observability/logger.go` and `internal/observability/logging.go`
+**Library:** `go.uber.org/zap` (production JSON encoder) + `go.opentelemetry.io/contrib/bridges/otelzap`
 
 | Symbol | Purpose |
 |---|---|
-| `Logger` | Package-level `*zap.Logger` — initialised once by `InitLogger()` |
+| `Logger` | Package-level `*zap.Logger` — initialised once by `InitLogger()`, then tee'd with OTel core by `InitLogging()` |
 | `SyncLogger()` | Flushes buffered log entries (deferred in `main()`) |
 | `LoggerWithTrace(ctx)` | Returns a child logger enriched with `trace_id` and `span_id` extracted from the OTel span context in the Go context |
+| `InitLogging(ctx)` | Creates an OTel `LoggerProvider` with OTLP/HTTP exporter and tees it into the existing Zap logger via `otelzap.NewCore` |
 
-**Key design decision:** `LoggerWithTrace` bridges Zap and OpenTelemetry. Every log line emitted through it automatically carries trace/span IDs, enabling log-to-trace correlation in backends like Grafana, Datadog, or Elastic.
+**Key design decision:** Logs are sent to two destinations simultaneously:
+1. **stdout** — structured JSON via the original Zap production encoder (for local dev, container log collection, etc.)
+2. **OTLP/HTTP** — via the OTel Zap bridge, pushed to the OTel Collector which forwards them to Loki
+
+This dual-write approach means logs are always visible locally and also available in Grafana Loki with full trace correlation (`trace_id`, `span_id`, `request_id`).
+
+`InitLogging()` must be called **after** `InitLogger()` and `InitTracing()` because it replaces the global `Logger` with a tee'd version that combines the stdout core with the OTel core.
+
+**Log flow:**
+```
+Zap Logger (tee'd)
+  ├── stdout core → terminal / container logs
+  └── otelzap core → OTel LoggerProvider → OTLP/HTTP → OTel Collector → Loki
+```
 
 ```go
 // In any handler or function with a context:
@@ -450,7 +466,7 @@ All OTel configuration is driven by standard environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `OTEL_SERVICE_NAME` | `go-chi-api` | Service name in traces and metrics |
+| `OTEL_SERVICE_NAME` | `go-chi-api` | Service name in traces, metrics, and logs |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP collector endpoint (HTTP) |
 | `OTEL_EXPORTER_OTLP_HEADERS` | (none) | Auth headers for the OTLP exporter |
 | `OTEL_RESOURCE_ATTRIBUTES` | (none) | Additional resource attributes (e.g. `deployment.environment=prod`) |

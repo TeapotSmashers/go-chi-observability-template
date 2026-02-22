@@ -8,6 +8,16 @@ import (
 	"go.uber.org/zap"
 )
 
+var untracedPaths = map[string]struct{}{
+	"/metrics": {},
+	"/health":  {},
+}
+
+func shouldTraceRequest(r *http.Request) bool {
+	_, skip := untracedPaths[r.URL.Path]
+	return !skip
+}
+
 func RequestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -41,5 +51,5 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 }
 
 func TracingMiddleware(next http.Handler) http.Handler {
-	return otelhttp.NewHandler(next, "http_request")
+	return otelhttp.NewHandler(next, "http_request", otelhttp.WithFilter(shouldTraceRequest))
 }

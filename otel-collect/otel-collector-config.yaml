@@ -7,6 +7,13 @@ receivers:
         endpoint: 0.0.0.0:4317
 
 processors:
+  filter/drop_noise:
+    error_mode: ignore
+    traces:
+      span:
+        - attributes["url.path"] == "/metrics"
+        - attributes["url.path"] == "/health"
+
   batch:
     timeout: 10s
     send_batch_size: 1000
@@ -18,8 +25,13 @@ exporters:
     const_labels:
       service: go-chi-api
 
-  otlp:
-    endpoint: tempo:4311
+  otlp_grpc/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  otlp_http/loki:
+    endpoint: http://loki:3100/otlp
     tls:
       insecure: true
 
@@ -27,10 +39,15 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp]
+      processors: [filter/drop_noise, batch]
+      exporters: [otlp_grpc/tempo]
 
     metrics:
       receivers: [otlp]
       processors: [batch]
       exporters: [prometheus]
+
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http/loki]

@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 func InitTracing(ctx context.Context) (func(context.Context) error, error) {
@@ -20,7 +21,9 @@ func InitTracing(ctx context.Context) (func(context.Context) error, error) {
 	res, err := resource.New(
 		ctx,
 		resource.WithFromEnv(),
-		resource.WithAttributes(),
+		resource.WithAttributes(
+			semconv.ServiceName(ServiceName()),
+		),
 	)
 	if err != nil {
 		return nil, err

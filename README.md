@@ -1,6 +1,6 @@
 # go-chi-observability-template
 
-A production-ready Go HTTP API boilerplate with observability as a first-class concern. Built on [go-chi/chi](https://github.com/go-chi/chi) with OpenTelemetry tracing, OpenTelemetry metrics, Prometheus metrics, and Zap structured logging — all wired together with automatic trace correlation.
+A production-ready Go HTTP API boilerplate with observability as a first-class concern. Built on [go-chi/chi](https://github.com/go-chi/chi) with OpenTelemetry tracing, OpenTelemetry metrics, Prometheus metrics, and Zap structured logging with OTel log export — all wired together with automatic trace correlation and cross-linked in Grafana.
 
 Start building your API with full observability from day one instead of bolting it on later.
 
@@ -11,11 +11,11 @@ Start building your API with full observability from day one instead of bolting 
 | **Distributed Tracing** | OpenTelemetry SDK | OTLP/HTTP push to any collector |
 | **Metrics (push)** | OpenTelemetry SDK | OTLP/HTTP push to any collector |
 | **Metrics (pull)** | Prometheus client | `GET /metrics` scrape endpoint |
-| **Structured Logging** | Zap (JSON) | stdout (production encoder) |
+| **Structured Logging** | Zap (JSON) | stdout + OTLP/HTTP push via OTel Zap bridge |
 | **Log-Trace Correlation** | Automatic | `trace_id` + `span_id` on every log line |
 | **Request IDs** | UUID v4 | Context propagation + `X-Request-ID` header |
 
-All three observability pillars are connected: logs carry trace IDs, spans carry request IDs, and errors are recorded across all systems in a single function call.
+All three observability pillars are connected: logs carry trace IDs and are exported to Loki via OTLP, spans carry request IDs, and errors are recorded across all systems in a single function call. In Grafana, Loki logs link to Tempo traces and vice versa.
 
 ## Quick Start
 
@@ -138,6 +138,7 @@ internal/
   observability/        # Generic infrastructure (never imports domain packages)
     errors.go           # RecordError() — shared error handling
     logger.go           # Zap logger + trace correlation
+    logging.go          # OTel LoggerProvider + Zap bridge (logs → OTLP)
     metrics.go          # OTel MeterProvider + Prometheus
     middleware.go       # RequestID, Tracing, Logging middlewares
     request_id.go       # UUID request ID + context helpers
@@ -197,7 +198,7 @@ All OpenTelemetry configuration is driven by standard environment variables — 
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `OTEL_SERVICE_NAME` | `go-chi-api` | Service name in traces and metrics |
+| `OTEL_SERVICE_NAME` | `go-chi-api` | Service name in traces, metrics, and logs |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP collector endpoint |
 | `OTEL_EXPORTER_OTLP_HEADERS` | — | Auth headers (e.g. for Grafana Cloud) |
 | `OTEL_RESOURCE_ATTRIBUTES` | — | Extra attributes (e.g. `deployment.environment=prod`) |
@@ -233,7 +234,8 @@ go run ./cmd/api
 |---|---|---|
 | [go-chi/chi](https://github.com/go-chi/chi) | v5.2.5 | HTTP router |
 | [uber/zap](https://github.com/uber-go/zap) | v1.27.1 | Structured logging |
-| [OpenTelemetry](https://opentelemetry.io/) | v1.40.0 | Tracing + metrics SDK |
+| [OpenTelemetry](https://opentelemetry.io/) | v1.40.0 | Tracing + metrics + logs SDK |
+| [otelzap](https://pkg.go.dev/go.opentelemetry.io/contrib/bridges/otelzap) | — | Zap → OTel log bridge |
 | [otelhttp](https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp) | v0.65.0 | Automatic HTTP instrumentation |
 | [prometheus/client_golang](https://github.com/prometheus/client_golang) | v1.23.2 | Prometheus `/metrics` endpoint |
 | [google/uuid](https://github.com/google/uuid) | v1.6.0 | Request ID generation |

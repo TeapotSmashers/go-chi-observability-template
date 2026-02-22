@@ -25,6 +25,7 @@ This document describes the Docker-based OTLP backend that collects traces, metr
 - [Common Tasks](#common-tasks)
   - [Viewing Traces](#viewing-traces)
   - [Querying Metrics](#querying-metrics)
+  - [Querying Logs](#querying-logs)
   - [Resetting Data](#resetting-data)
 - [Troubleshooting](#troubleshooting)
 
@@ -33,46 +34,32 @@ This document describes the Docker-based OTLP backend that collects traces, metr
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Host machine                                                   │
-│                                                                 │
-│  ┌──────────────┐                                               │
-│  │  Go API      │                                               │
-│  │  :8080       │                                               │
-│  └──────┬───────┘                                               │
-│         │  OTLP/HTTP (:4318)          Prometheus scrape (:8080) │
-│         ▼                                    ▲                  │
-│  ┌──────────────────┐                        │                  │
-│  │  OTel Collector   │                        │                  │
-│  │  :4317 :4318      │                        │                  │
-│  │  :8888 :8889      │                        │                  │
-│  └──┬──────────┬─────┘                        │                  │
-│     │ traces   │ metrics                      │                  │
-│     ▼          ▼                              │                  │
-│  ┌────────┐ ┌──────────┐                      │                  │
-│  │ Tempo  │ │Prometheus│──────────────────────┘                  │
-│  │ :3200  │ │  :9090   │                                        │
-│  └────┬───┘ └────┬─────┘                                        │
-│       │          │                                               │
-│       ▼          ▼                                               │
-│  ┌─────────────────┐                                            │
-│  │    Grafana       │                                            │
-│  │    :3000         │                                            │
-│  └─────────────────┘                                            │
-└─────────────────────────────────────────────────────────────────┘
+Go API (:8080)
+  ├── OTLP/HTTP (:4318) ───────► OTel Collector (:4317/:4318)
+  │                               ├── traces (OTLP gRPC) ───► Tempo (:3200)
+  │                               ├── metrics (Prom exp) ───► :8889 (scraped by Prometheus)
+  │                               └── logs (OTLP HTTP) ─────► Loki (:3100/otlp)
+  └── /metrics scrape target ───► Prometheus (:9090)
+
+Grafana (:3000)
+  ├── Prometheus datasource
+  ├── Tempo datasource
+  └── Loki datasource (with trace links)
 ```
 
 ## Data Flow
 
-There are two independent data paths:
+There are four independent data paths:
 
-1. **Traces:** Go API pushes OTLP/HTTP to the OTel Collector on port `4318`. The Collector batches and forwards traces via OTLP to Grafana Tempo. Grafana queries Tempo to display trace waterfalls.
+1. **Traces:** Go API pushes OTLP/HTTP to the OTel Collector on port `4318`. The Collector batches and forwards traces via OTLP/gRPC to Grafana Tempo. Grafana queries Tempo to display trace waterfalls.
 
 2. **Metrics (push):** Go API pushes OTLP/HTTP metrics to the OTel Collector on port `4318`. The Collector converts them to Prometheus format and exposes them on port `8889`. Prometheus scrapes port `8889` to ingest the pushed metrics.
 
 3. **Metrics (pull):** Prometheus also directly scrapes the Go API's `/metrics` endpoint on port `8080` for Prometheus-native metrics (Go runtime stats, etc.).
 
-Grafana is pre-configured with Tempo and Prometheus as datasources and provides the visualization layer for both.
+4. **Logs:** Go API pushes OTLP/HTTP logs to the OTel Collector on port `4318` via the OTel Zap bridge. The Collector batches and forwards logs via OTLP/HTTP to Loki's native OTLP endpoint (`/otlp`). Grafana queries Loki to display structured logs with trace correlation.
+
+Grafana is pre-configured with Tempo, Prometheus, and Loki as datasources. Cross-linking is configured so that Loki logs link to Tempo traces (via `trace_id` derived field) and Tempo traces link back to Loki logs (via `tracesToLogs`).
 
 ---
 
@@ -95,7 +82,7 @@ Grafana is pre-configured with Tempo and Prometheus as datasources and provides 
 
 ### Grafana Tempo
 
-- **Image:** `grafana/tempo:latest`
+- **Image:** `grafana/tempo:2.7.2`
 - **Role:** Distributed tracing backend — stores and indexes trace spans.
 - **Ports:**
 
@@ -103,7 +90,8 @@ Grafana is pre-configured with Tempo and Prometheus as datasources and provides 
 |------|----------|---------|
 | 3200 | HTTP | Tempo API (queried by Grafana) |
 | 4316 | gRPC | OTLP gRPC receiver (internal) |
-| 4311 | HTTP | OTLP HTTP receiver (internal) |
+| 4317 | gRPC | OTLP gRPC receiver (internal) |
+| 4318 | HTTP | OTLP HTTP receiver (internal) |
 
 - **Storage:** Local filesystem at `/var/tempo` (Docker volume `tempo-data`).
 - **Config:** `tempo.yaml`
@@ -122,20 +110,21 @@ Grafana is pre-configured with Tempo and Prometheus as datasources and provides 
 ### Loki
 
 - **Image:** `grafana/loki:latest`
-- **Role:** Log aggregation backend. Currently available for future use — the Go API does not push logs to Loki by default. Logs are written to stdout as structured JSON and can be collected by a log shipper if needed.
+- **Role:** Log aggregation backend. The Go API pushes structured logs to Loki through the OTel Collector using OTLP/HTTP.
 - **Port:** `3100`
 - **Storage:** Docker volume `loki-data`
 
 ### Grafana
 
 - **Image:** `grafana/grafana:latest`
-- **Role:** Visualization and exploration UI. Pre-configured with Tempo and Prometheus as datasources.
+- **Role:** Visualization and exploration UI. Pre-configured with Tempo, Prometheus, and Loki datasources, including trace↔log cross-linking.
 - **Port:** `3000`
 - **Auth:** Anonymous access enabled with Admin role — no login required.
 - **Feature flags:** `traceqlEditor` enabled for TraceQL query editor.
 - **Pre-provisioned datasources:**
   - **Tempo** — `http://tempo:3200`
   - **Prometheus** (default) — `http://prometheus:9090`
+  - **Loki** — `http://loki:3100`
 - **Config:** `grafana-datasources.yaml`
 
 ---
@@ -181,13 +170,13 @@ docker-compose -f otel-collect/docker-compose.yml down -v
 
 ## Connecting the Go API
 
-The Go API uses the standard `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable (see `internal/observability/tracing.go` and `internal/observability/metrics.go`). Point it at the OTel Collector:
+The Go API uses the standard `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable (see `internal/observability/tracing.go`, `internal/observability/metrics.go`, and `internal/observability/logging.go`). Point it at the OTel Collector:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 go run ./cmd/api
 ```
 
-That's it. Both traces (via `otlptracehttp`) and metrics (via `otlpmetrichttp`) are sent to the Collector, which routes them to Tempo and Prometheus respectively.
+That's it. Traces (via `otlptracehttp`), metrics (via `otlpmetrichttp`), and logs (via `otlploghttp` + `otelzap` bridge) are sent to the Collector, which routes them to Tempo, Prometheus, and Loki respectively.
 
 You can also set `OTEL_SERVICE_NAME` to customize how the service appears in Grafana:
 
@@ -199,7 +188,7 @@ go run ./cmd/api
 
 ### Generate sample data
 
-Once the API is running, send some requests to generate traces and metrics:
+Once the API is running, send some requests to generate traces, metrics, and logs:
 
 ```bash
 # Simple operation
@@ -215,7 +204,7 @@ curl -X POST http://localhost:8080/calculator/divide \
 # Chained operations (produces nested spans)
 curl -X POST http://localhost:8080/calculator/chain \
   -H 'Content-Type: application/json' \
-  -d '{"initial_value": 10, "steps": [{"operation": "add", "value": 5}, {"operation": "multiply", "value": 3}]}'
+  -d '{"initial": 10, "steps": [{"op": "add", "value": 5}, {"op": "multiply", "value": 3}]}'
 ```
 
 ---
@@ -226,6 +215,7 @@ curl -X POST http://localhost:8080/calculator/chain \
 |---------|-----|---------|
 | Grafana | http://localhost:3000 | Dashboards, trace explorer, metric queries |
 | Prometheus | http://localhost:9090 | Raw PromQL queries, target health |
+| Loki | http://localhost:3100 | Loki API (usually accessed via Grafana) |
 | Tempo | http://localhost:3200 | Tempo API (usually accessed via Grafana) |
 
 ---
@@ -267,8 +257,9 @@ All configuration files live in the `otel-collect/` directory.
 Defines all five services (otel-collector, tempo, prometheus, loki, grafana) and their Docker volumes. Key configuration choices:
 
 - **Grafana anonymous auth:** `GF_AUTH_ANONYMOUS_ENABLED=true` with `GF_AUTH_ANONYMOUS_ORG_ROLE=Admin` — no login barrier for local development.
-- **Datasource provisioning:** `grafana-datasources.yaml` is mounted into Grafana's provisioning directory so Tempo and Prometheus are available immediately.
-- **Service dependencies:** The OTel Collector depends on Tempo and Prometheus. Grafana depends on Prometheus and Tempo.
+- **Datasource provisioning:** `grafana-datasources.yaml` is mounted into Grafana's provisioning directory so Tempo, Prometheus, and Loki are available immediately.
+- **Service dependencies:** The OTel Collector depends on Tempo, Prometheus, and Loki. Grafana depends on Prometheus, Tempo, and Loki.
+- **Tempo version pin:** Tempo is pinned to `2.7.2` for stable local single-binary behavior.
 
 ### `otel-collector-config.yaml`
 
@@ -277,22 +268,23 @@ Defines the Collector's pipeline:
 ```
 Receivers          Processors        Exporters
 ─────────          ──────────        ─────────
-otlp (HTTP+gRPC)   batch             traces  → otlp (Tempo)
+otlp (HTTP+gRPC)   batch             traces  → otlp_grpc/tempo (4317)
                                      metrics → prometheus (port 8889)
+                                     logs    → otlp_http/loki (/otlp)
 ```
 
 - **Batch processor:** Buffers spans/metrics for 10 seconds or 1000 items before flushing — reduces network overhead.
 - **Prometheus exporter:** Converts OTLP metrics to Prometheus format under the `otel` namespace with a `service=go-chi-api` label.
-- **OTLP exporter:** Forwards traces to Tempo on port `4311` (HTTP) with TLS disabled (internal Docker network).
+- **OTLP gRPC exporter:** Forwards traces to Tempo on port `4317` with TLS disabled (internal Docker network).
+- **OTLP HTTP exporter:** Forwards logs to Loki's native OTLP endpoint (`http://loki:3100/otlp`).
 
 ### `tempo.yaml`
 
-Minimal Tempo configuration:
+Tempo configuration in this repo is tuned for a local single-node deployment:
 
-- Listens on port `3200` (HTTP API) and `4316` (gRPC)
-- Accepts OTLP traces via the distributor
-- Stores traces locally at `/var/tempo` with a 5-minute block duration
-- Uses WAL (write-ahead log) for durability
+- Uses OTLP receivers for trace ingestion (gRPC + HTTP)
+- Includes an in-memory ring with replication factor `1` for local operation
+- Stores traces locally at `/var/tempo` with WAL enabled
 
 ### `prometheus.yaml`
 
@@ -307,12 +299,17 @@ Scrape interval is 15 seconds.
 
 ### `grafana-datasources.yaml`
 
-Auto-provisions two datasources in Grafana on startup:
+Auto-provisions three datasources in Grafana on startup:
 
 - **Prometheus** (default) — for metric queries via PromQL
 - **Tempo** — for trace queries via TraceQL
+- **Loki** — for log queries via LogQL
 
-Both are marked as editable so you can modify them in the Grafana UI if needed.
+Cross-linking is configured in datasource JSON:
+- **Tempo -> Loki:** `tracesToLogs` uses `trace_id` and `service.name`
+- **Loki -> Tempo:** `derivedFields` exposes a "View Trace" link using the `trace_id` label
+
+All three are marked as editable so you can modify them in the Grafana UI if needed.
 
 ---
 
@@ -354,6 +351,25 @@ go_goroutines
 
 Metrics pushed through the OTel Collector are prefixed with `otel_` (configured via the `namespace` setting in the Collector's Prometheus exporter).
 
+### Querying Logs
+
+1. Open Grafana at http://localhost:3000
+2. Click **Explore** in the left sidebar
+3. Select **Loki** from the datasource dropdown
+4. Enter a LogQL query
+
+Example queries:
+
+```logql
+# Recent logs for this service
+{service_name="go-chi-api"}
+
+# Only error logs
+{service_name="go-chi-api", severity_text="error"}
+```
+
+From a log line containing `trace_id`, click **View Trace** (derived field) to jump directly to the matching Tempo trace.
+
 ### Resetting Data
 
 To clear all stored traces, metrics, and dashboards:
@@ -380,7 +396,7 @@ docker logs otel-collect-otel-collector-1
 
 Common causes:
 - **Tempo:** Invalid YAML in `tempo.yaml` — the `distributor.receivers` section must use map syntax (`otlp:`) not list syntax (`- otlp`).
-- **OTel Collector:** Invalid exporter name or unreachable backend — check that Tempo and Prometheus are healthy before the Collector starts.
+- **OTel Collector:** Invalid exporter name or unreachable backend — check that Tempo, Prometheus, and Loki are healthy before the Collector starts.
 
 ### No traces appearing in Grafana
 
@@ -394,6 +410,14 @@ Common causes:
 1. Check Prometheus target health at http://localhost:9090/targets — all targets should be `UP`
 2. If `go-chi-api` target is `DOWN`, ensure the API is running on port 8080
 3. If `opentelemetry-collector` targets are `DOWN`, check that the Collector is running
+
+### Traces show `<root span not yet received>`
+
+This usually means root spans are missing required resource attributes (especially `service.name`) or traces are incomplete.
+
+1. Ensure `internal/observability/tracing.go` sets `service.name` on the tracer resource
+2. Restart the API after config/code changes
+3. Generate fresh requests and check new traces (old traces remain unchanged)
 
 ### Port conflicts
 

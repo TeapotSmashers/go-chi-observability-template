@@ -45,6 +45,7 @@ go-chi-observability/
 │   ├── observability/           # Generic observability infrastructure
 │   │   ├── errors.go            # RecordError() — shared span+metric+log+response
 │   │   ├── logger.go            # Zap logger + trace correlation
+│   │   ├── logging.go           # OTel LoggerProvider + Zap bridge (logs → OTLP)
 │   │   ├── metrics.go           # OTel MeterProvider + Prometheus handler
 │   │   ├── middleware.go        # RequestID, Tracing, Logging middlewares
 │   │   ├── request_id.go        # UUID request ID + context helpers
