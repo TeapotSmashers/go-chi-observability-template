@@ -49,6 +49,14 @@ internal/
 docs/
   observability.md   # Deep-dive on observability internals + instrumentation guide
   api-structure.md   # Package structure, naming, and conventions
+  otel-collect.md    # Local OTLP backend setup + Grafana visualization guide
+
+otel-collect/          # Docker-based observability backend
+  docker-compose.yml           # All services: OTel Collector, Tempo, Prometheus, Loki, Grafana
+  otel-collector-config.yaml   # Collector pipeline: OTLP → Tempo (traces) + Prometheus (metrics)
+  tempo.yaml                   # Grafana Tempo trace storage config
+  prometheus.yaml              # Prometheus scrape targets
+  grafana-datasources.yaml     # Auto-provisioned Grafana datasources
 ```
 
 ## Key Architecture Rules
@@ -121,6 +129,32 @@ Environment variables for OTel configuration:
 - `OTEL_EXPORTER_OTLP_ENDPOINT` (default: `http://localhost:4318`)
 - `OTEL_RESOURCE_ATTRIBUTES` (e.g. `deployment.environment=staging`)
 
+## Local Observability Backend
+
+A Docker-based OTLP backend lives in `otel-collect/`. It provides an OTel Collector, Grafana Tempo (traces), Prometheus (metrics), Loki (logs), and Grafana (visualization).
+
+```bash
+# Start the backend
+docker-compose -f otel-collect/docker-compose.yml up -d
+
+# Run the API connected to the backend
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 go run ./cmd/api
+
+# Stop the backend
+docker-compose -f otel-collect/docker-compose.yml down
+
+# Stop and wipe all data
+docker-compose -f otel-collect/docker-compose.yml down -v
+```
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Grafana | http://localhost:3000 | Dashboards, trace explorer, metric queries |
+| Prometheus | http://localhost:9090 | Raw PromQL queries, target health |
+| Tempo | http://localhost:3200 | Trace API (usually accessed via Grafana) |
+
+See `docs/otel-collect.md` for the full configuration guide.
+
 ## Existing Endpoints
 
 | Method | Path | Description |
@@ -141,3 +175,4 @@ When orienting in this codebase, read these in order:
 3. `internal/calculator/handlers.go` — reference implementation for new domains
 4. `docs/observability.md` — complete instrumentation guide
 5. `docs/api-structure.md` — package structure conventions
+6. `docs/otel-collect.md` — local OTLP backend setup and Grafana visualization
