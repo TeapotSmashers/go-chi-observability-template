@@ -11,41 +11,27 @@
     "to": "now"
   },
   "templating": {
-    "list": [
-      {
-        "name": "trace_id",
-        "type": "textbox",
-        "current": {
-          "value": "",
-          "text": ""
-        },
-        "label": "Trace ID"
-      }
-    ]
+    "list": []
   },
   "panels": [
     {
       "id": 1,
-      "title": "Trace Viewer",
-      "type": "traces",
+      "title": "Operations by Type",
+      "type": "timeseries",
       "datasource": {
-        "type": "tempo",
-        "uid": "tempo"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
       "gridPos": {
-        "h": 16,
+        "h": 12,
         "w": 24,
         "x": 0,
         "y": 0
       },
       "targets": [
         {
-          "datasource": {
-            "type": "tempo",
-            "uid": "tempo"
-          },
-          "queryType": "traceql",
-          "query": ".name=\"calculator.chain\""
+          "expr": "sum by (operation) (otel_calculator_operations_total)",
+          "legendFormat": "{{operation}}"
         }
       ]
     },
@@ -61,7 +47,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 12
       },
       "targets": [
         {
@@ -82,11 +68,53 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 12
       },
       "targets": [
         {
           "expr": "{service_name=\"go-chi-api\"} |= \"chain\""
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Total Errors",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum(otel_calculator_errors_total)",
+          "legendFormat": "Total Errors"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Errors by Operation",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation) (otel_calculator_errors_total)",
+          "legendFormat": "{{operation}}"
         }
       ]
     }
