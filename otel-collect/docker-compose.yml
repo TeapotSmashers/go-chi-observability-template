@@ -52,6 +52,8 @@ services:
     image: grafana/grafana:latest
     volumes:
       - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./dashboards:/var/lib/grafana/dashboards
       - grafana-data:/var/lib/grafana
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true

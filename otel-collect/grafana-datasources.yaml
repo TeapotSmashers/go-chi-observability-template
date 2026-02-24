@@ -45,8 +45,12 @@ datasources:
     jsonData:
       derivedFields:
         - datasourceUid: tempo
-          matcherRegex: (.+)
+          # matcherType: label matches against label keys (including structured
+          # metadata). trace_id is the Zap field that actually exists in Loki
+          # records — it is populated by LoggerWithTrace via zap.String("trace_id", ...).
+          # The native OTel TraceID field (traceID) is all-zeros and absent.
+          matcherRegex: "trace_id"
           matcherType: label
           name: trace_id
-          url: "${__value.raw}"
+          url: "$${__value.raw}"
           urlDisplayLabel: View Trace
