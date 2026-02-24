@@ -11,7 +11,17 @@
     "to": "now"
   },
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "request_id",
+        "type": "textbox",
+        "label": "Request ID (regex)",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      }
+    ]
   },
   "panels": [
     {
@@ -58,7 +68,7 @@
     },
     {
       "id": 3,
-      "title": "Recent Logs",
+      "title": "Request Lookup (Logs -> Trace)",
       "type": "logs",
       "datasource": {
         "type": "loki",
@@ -72,7 +82,7 @@
       },
       "targets": [
         {
-          "expr": "{service_name=\"go-chi-api\"} |= \"chain\""
+          "expr": "{service_name=\"go-chi-api\"} | json | request_id=~\"$request_id\""
         }
       ]
     },
