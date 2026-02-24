@@ -132,7 +132,6 @@ func handleBinaryOp(w http.ResponseWriter, r *http.Request, opName string, compu
 		A:         req.A,
 		B:         req.B,
 		Result:    result,
-		RequestID: requestID,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -239,7 +238,7 @@ func Chain(w http.ResponseWriter, r *http.Request) {
 				zap.String("request_id", requestID),
 			)
 
-			handlers.WriteError(w, http.StatusBadRequest, err.Error(), requestID)
+			handlers.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
@@ -290,10 +289,9 @@ func Chain(w http.ResponseWriter, r *http.Request) {
 	)
 
 	resp := ChainResponse{
-		Initial:   req.Initial,
-		Steps:     results,
-		Result:    running,
-		RequestID: requestID,
+		Initial: req.Initial,
+		Steps:   results,
+		Result:  running,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

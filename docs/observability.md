@@ -154,7 +154,7 @@ const RequestIDKey contextKey = "request_id"
 | `ContextWithRequestID(ctx, id)` | Stores the ID in the context |
 | `RequestIDFromContext(ctx)` | Retrieves the ID (returns `""` if absent) |
 
-The `RequestIDMiddleware` calls these automatically. Handlers access the ID via `observability.RequestIDFromContext(ctx)`. It is also set as the `X-Request-ID` response header and included in all JSON error responses.
+The `RequestIDMiddleware` calls these automatically. Handlers access the ID via `observability.RequestIDFromContext(ctx)`. It is set as the `X-Request-ID` response header for every request.
 
 ---
 
@@ -217,7 +217,7 @@ What it does:
 1. **Span:** calls `span.RecordError(err)` and `span.SetStatus(codes.Error, msg)`
 2. **Metric:** increments the provided counter with an `operation` attribute
 3. **Log:** emits an error-level log with operation name, error, and request ID
-4. **Response:** writes a JSON error response `{"error": "...", "request_id": "..."}`
+4. **Response:** writes a JSON error response `{"error": "..."}` (request ID is in `X-Request-ID`)
 
 The error counter is passed as a parameter (not hardcoded) so this function is domain-agnostic. Each domain passes its own counter.
 
@@ -225,7 +225,7 @@ The error counter is passed as a parameter (not hardcoded) so this function is d
 
 **File:** `internal/handlers/response.go`
 
-`handlers.WriteError(w, status, msg, requestID)` writes a standardised JSON error response. Use this when you need to write an error response without the full span+metric+log ceremony (e.g. when you've already handled those separately).
+`handlers.WriteError(w, status, msg)` writes a standardised JSON error response. Use this when you need to write an error response without the full span+metric+log ceremony (e.g. when you've already handled those separately).
 
 ---
 
@@ -241,7 +241,7 @@ When adding a new handler or feature, follow this checklist to ensure full obser
 - [ ] Record domain-specific metrics (counter, histogram, gauge)
 - [ ] Use `observability.RecordError()` for error paths
 - [ ] Log key business events with structured fields
-- [ ] Include `request_id` in all JSON responses
+- [ ] Ensure `X-Request-ID` response header is present and propagated
 
 ### Creating Custom Spans
 

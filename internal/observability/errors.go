@@ -30,7 +30,6 @@ func RecordError(ctx context.Context, span trace.Span, logger *zap.Logger, count
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{
-		"error":      msg,
-		"request_id": RequestIDFromContext(ctx),
+		"error": msg,
 	})
 }

@@ -12,7 +12,6 @@ type CalcResponse struct {
 	A         float64 `json:"a"`
 	B         float64 `json:"b"`
 	Result    float64 `json:"result"`
-	RequestID string  `json:"request_id"`
 }
 
 // ChainStep describes a single step in a chained calculation.
@@ -29,10 +28,9 @@ type ChainRequest struct {
 
 // ChainResponse is the JSON response for POST /calculator/chain.
 type ChainResponse struct {
-	Initial   float64       `json:"initial"`
-	Steps     []ChainResult `json:"steps"`
-	Result    float64       `json:"result"`
-	RequestID string        `json:"request_id"`
+	Initial float64       `json:"initial"`
+	Steps   []ChainResult `json:"steps"`
+	Result  float64       `json:"result"`
 }
 
 // ChainResult records one executed step.

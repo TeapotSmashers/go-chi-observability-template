@@ -96,9 +96,8 @@ type CreateRequest struct {
 }
 
 type CreateResponse struct {
-    ID        string `json:"id"`
-    Name      string `json:"name"`
-    RequestID string `json:"request_id"`
+    ID   string `json:"id"`
+    Name string `json:"name"`
 }
 ```
 
@@ -329,10 +328,9 @@ type CreateRequest struct {
 }
 
 type UserResponse struct {
-    ID        string `json:"id"`
-    Email     string `json:"email"`
-    Name      string `json:"name"`
-    RequestID string `json:"request_id"`
+    ID    string `json:"id"`
+    Email string `json:"email"`
+    Name  string `json:"name"`
 }
 ```
 
