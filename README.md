@@ -196,6 +196,8 @@ if err := newdomain.InitMetrics(); err != nil {
 
 All OpenTelemetry configuration is driven by standard environment variables — no code changes needed to switch between local dev and production:
 
+The API automatically loads variables from `.env` on startup (when the file exists), while still letting real environment variables take precedence.
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `OTEL_SERVICE_NAME` | `go-chi-api` | Service name in traces, metrics, and logs |

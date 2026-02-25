@@ -13,6 +13,9 @@ import (
 )
 
 func main() {
+	if err := loadDotEnv(); err != nil {
+		panic(err)
+	}
 
 	ctx := context.Background()
 
