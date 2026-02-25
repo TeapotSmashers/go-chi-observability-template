@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"go-chi-observability/internal/testutil"
+
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -19,9 +21,7 @@ func TestRequestIDMiddlewareSetsHeaderAndContext(t *testing.T) {
 	}))
 
 	r := httptest.NewRequest(http.MethodGet, "/calculator/add", nil)
-	w := httptest.NewRecorder()
-
-	h.ServeHTTP(w, r)
+	w := testutil.ExecuteRequest(r, h)
 
 	headerRequestID := w.Result().Header.Get("X-Request-ID")
 	if headerRequestID == "" {
@@ -70,9 +70,7 @@ func TestLoggingMiddlewareWritesCompletionLog(t *testing.T) {
 
 	r := httptest.NewRequest(http.MethodPost, "/calculator/add", nil)
 	r = r.WithContext(ContextWithRequestID(r.Context(), "req-123"))
-	w := httptest.NewRecorder()
-
-	h.ServeHTTP(w, r)
+	_ = testutil.ExecuteRequest(r, h)
 
 	entries := logs.All()
 	if len(entries) != 1 {

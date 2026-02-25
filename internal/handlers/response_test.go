@@ -1,10 +1,11 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"go-chi-observability/internal/testutil"
 )
 
 func TestWriteErrorWritesStandardizedJSON(t *testing.T) {
@@ -13,18 +14,14 @@ func TestWriteErrorWritesStandardizedJSON(t *testing.T) {
 	WriteError(w, http.StatusBadRequest, "something went wrong")
 
 	resp := w.Result()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, resp.StatusCode)
-	}
+	testutil.CheckResponseCode(t, http.StatusBadRequest, resp.StatusCode)
 
 	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
 		t.Fatalf("expected Content-Type application/json, got %q", ct)
 	}
 
 	var body map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decoding response body: %v", err)
-	}
+	testutil.DecodeJSONBody(t, resp.Body, &body)
 
 	if got := body["error"]; got != "something went wrong" {
 		t.Fatalf("expected error %q, got %q", "something went wrong", got)
